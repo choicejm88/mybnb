@@ -55,7 +55,7 @@ public class Room {
             mybnb.external.Host host = new mybnb.external.Host();
             host.setRoomId(getId());
             host.setHost(getHost());
-            host.setApproval("RoomRegisterApproved");
+            host.setApproval("Verified");
 
             // mappings goes here
             try {
