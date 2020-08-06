@@ -58,7 +58,7 @@ public class PolicyHandler{
     public void wheneverVerified_Notify(@Payload Verified verified){
 
         if(verified.isMe()){
-            //System.out.println("##### listener Notify : " + verified.toJson());
+            System.out.println("##### listener Notify : " + verified.toJson());
             addNotificationHistory("(host)" + verified.getApproval(), "Verified");
         }
     }
