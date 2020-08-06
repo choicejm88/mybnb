@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="MavenProjectsManager">
+    <option name="originalFiles">
+      <list>
+        <option value="$PROJECT_DIR$/mybnb/alarm/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/html/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/mypage/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/pay/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/review/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/booking/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/gateway/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/host/pom.xml" />
+        <option value="$PROJECT_DIR$/mybnb/room/pom.xml" />
+      </list>
+    </option>
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="1.8" project-jdk-type="JavaSDK" />
+</project>

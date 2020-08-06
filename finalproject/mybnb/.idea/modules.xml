@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/mybnb/alarm/alarm.iml" filepath="$PROJECT_DIR$/mybnb/alarm/alarm.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/booking/booking.iml" filepath="$PROJECT_DIR$/mybnb/booking/booking.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/gateway/boot-camp-gateway.iml" filepath="$PROJECT_DIR$/mybnb/gateway/boot-camp-gateway.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/host/host.iml" filepath="$PROJECT_DIR$/mybnb/host/host.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/html/html.iml" filepath="$PROJECT_DIR$/mybnb/html/html.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/mybnb.iml" filepath="$PROJECT_DIR$/.idea/mybnb.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/mypage/mypage.iml" filepath="$PROJECT_DIR$/mybnb/mypage/mypage.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/pay/pay.iml" filepath="$PROJECT_DIR$/mybnb/pay/pay.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/review/review.iml" filepath="$PROJECT_DIR$/mybnb/review/review.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mybnb/room/room.iml" filepath="$PROJECT_DIR$/mybnb/room/room.iml" />
+    </modules>
+  </component>
+</project>
