@@ -17,7 +17,7 @@ public class PolicyHandler{
 
     @Autowired
     private HostRepository hostRepository;
-
+/*
     @StreamListener(KafkaProcessor.INPUT)
     public void wheneverRoomRegistered_Register(@Payload RoomRegistered roomRegistered){
 
@@ -31,7 +31,7 @@ public class PolicyHandler{
             hostRepository.save(hosthistory);
         }
     }
-
+*/
 
 
 }

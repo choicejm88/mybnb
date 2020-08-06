@@ -48,17 +48,7 @@ public class Host {
 
     @PostPersist
     public void onPostPersist(){
-        HostRegistered hostRegistered = new HostRegistered();
-        BeanUtils.copyProperties(this, hostRegistered);
-        hostRegistered.publishAfterCommit();
-
-
-        if("Verified".equals(getApproval())) {
-            Verified verified = new Verified();
-            BeanUtils.copyProperties(this, verified);
-            verified.setApproval(getApproval());
-            verified.publishAfterCommit();
-/*
+        /*
             // 승인이력 저장한 후 적당한 시간 끌기
             try {
                 Thread.currentThread().sleep((long) (400 + Math.random() * 220));
@@ -66,9 +56,11 @@ public class Host {
                 e.printStackTrace();
             }
             */
-        }
 
-
+        Verified verified = new Verified();
+        BeanUtils.copyProperties(this, verified);
+        verified.setApproval(getApproval());
+        verified.publishAfterCommit();
     }
 
 
