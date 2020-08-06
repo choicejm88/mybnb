@@ -1,0 +1,591 @@
+
+siege 접속
+
+kubectl exec -it siege -n mybnb -- /bin/bash
+
+숙소 등록 (siege 에서)
+http POST http://room:8080/rooms name=호텔 price=1000 address=서울 host=테스트10
+http POST http://room:8080/rooms name=펜션 price=1000 address=강원도 host=테스트11
+http POST http://room:8080/rooms name=민박 price=1000 address=인천 host=테스트12
+
+숙소 확인 (siege 에서)
+http http://room:8080/rooms
+
+인증 확인 (siege 에서)
+http http://host:8080/hosts
+
+예약 (siege 에서)
+http POST http://booking:8080/bookings roomId=1 name=호텔 price=1000 address=서울 host=테스트10 guest=최씨 usedate=20201111
+
+예약 확인 (siege 에서)
+http http://booking:8080/bookings/1
+
+1) 동기식 호출 과 Fallback 처리
+숙소 등록시 인증 서비스를 동기식으로 호출.
+동기식 호출에서는 호출 시간에 따른 타임 커플링이 발생 
+인증시스템이 장애시 숙소 등록을 불가확인
+
+호스트 서비스 중지
+$ kubectl delete -f host.yaml
+
+(POD 상태)
+
+
+
+숙소 등록 에러 확인 (siege 에서)
+http POST http://room:8080/rooms name=호텔 price=1000 address=서울 host=테스트15
+
+(처리에러)
+
+인증 서비스 기동
+$ kubectl apply -f host.yaml
+
+(POD 상태)
+
+숙소 등록 성공 확인 (siege 에서)
+http POST http://room:8080/rooms name=호텔 price=1000 address=인천 host=테스트16
+
+(처리성공)
+
+
+
+
+2) 비동기식 호출 / 시간적 디커플링 / 장애격리 / 최종 (Eventual) 일관성 테스트
+숙소가 등록된 후에 알림 처리는 비동기식으로 처리하여 알림 처리 확인 
+
+알림 서비스 중지
+kubectl delete -f alarm.yaml
+
+kubectl get all -n mybnb
+(POD 상태)
+NAME                           READY   STATUS    RESTARTS   AGE
+pod/booking-6f85b67876-fwbdn   2/2     Running   0          3h58m
+pod/gateway-7bd59945-rk6fk     2/2     Running   0          3h58m
+pod/host-69b4f886c-wsr6b       2/2     Running   0          14m
+pod/html-78f648d5b-mx6zb       2/2     Running   0          3h58m
+pod/mypage-7587b7598b-bkdbn    2/2     Running   0          3h58m
+pod/pay-755d679cbf-r9s4v       2/2     Running   0          3h58m
+pod/room-6f4b46ff64-k89fs      2/2     Running   0          32m
+pod/siege                      2/2     Running   0          15h
+
+
+숙소 등록 성공 확인 (siege 에서)
+http POST http://room:8080/rooms name=호텔 price=1000 address=인천 host=테스트16
+
+알림 이력 조회 불가 확인 (siege 에서)
+http http://alarm:8080/alarms
+
+(처리에러)
+root@siege:/# http http://alarm:8080/alarms
+
+http: error: ConnectionError: HTTPConnectionPool(host='alarm', port=8080): Max retries exceeded with url: /alarms (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f83fbfe3f28>: Failed to establish a new connection: [Errno -2] Name or service not known')) while doing GET request to URL: http://alarm:8080/alarms
+root@siege:/#
+
+
+
+숙소 등록 성공 확인 (siege 에서)
+http POST http://room:8080/rooms name=호텔10 price=1000 address=인천 host=테스트17
+
+(처리성공)
+HTTP/1.1 201 Created
+content-type: application/json;charset=UTF-8
+date: Thu, 06 Aug 2020 05:11:06 GMT
+location: http://room:8080/rooms/7
+server: envoy
+transfer-encoding: chunked
+x-envoy-upstream-service-time: 81
+
+{
+    "_links": {
+        "room": {
+            "href": "http://room:8080/rooms/7"
+        },
+        "self": {
+            "href": "http://room:8080/rooms/7"
+        }
+    },
+    "address": "인천",
+    "host": "테스트17",
+    "name": "호텔10",
+    "price": 1000
+}
+
+****알림 시스템은 숙소와 완전히 분리되어있으며, 이벤트 수신에 따라 처리되기 때문에, 
+알림 시스템이 유지보수로 인해 잠시 내려간 상태라도 숙소를 등록하는데 문제가 없다을 받는데 문제가 없다:
+
+
+알림 서비스 기동
+kubectl apply -f alarm.yaml
+
+(POD 상태)
+NAME                           READY   STATUS    RESTARTS   AGE
+pod/alarm-bc469c66b-t4mt8      2/2     Running   0          27s
+pod/booking-6f85b67876-fwbdn   2/2     Running   0          4h1m
+pod/gateway-7bd59945-rk6fk     2/2     Running   0          4h1m
+pod/host-69b4f886c-wsr6b       2/2     Running   0          16m
+pod/html-78f648d5b-mx6zb       2/2     Running   0          4h1m
+pod/mypage-7587b7598b-bkdbn    2/2     Running   0          4h
+pod/pay-755d679cbf-r9s4v       2/2     Running   0          4h1m
+pod/room-6f4b46ff64-k89fs      2/2     Running   0          35m
+pod/siege                      2/2     Running   0          15h
+
+
+
+알림 이력 조회 성송 확인 (siege 에서)
+http http://alarm:8080/alarms 
+
+(처리성공)
+HTTP/1.1 200 OK
+content-type: application/hal+json;charset=UTF-8
+date: Thu, 06 Aug 2020 05:12:32 GMT
+server: envoy
+transfer-encoding: chunked
+x-envoy-upstream-service-time: 362
+
+{
+    "_embedded": {
+        "alarms": [
+            {
+                "_links": {
+                    "alarm": {
+                        "href": "http://alarm:8080/alarms/1"
+                    },
+                    "self": {
+                        "href": "http://alarm:8080/alarms/1"
+                    }
+                },
+                "message": "Verified",
+                "receiver": "(host)RoomRegisterApproved"
+            }
+        ]
+    },
+    "_links": {
+        "profile": {
+            "href": "http://alarm:8080/profile/alarms"
+        },
+        "self": {
+            "href": "http://alarm:8080/alarms{?page,size,sort}",
+            "templated": true
+        }
+    },
+    "page": {
+        "number": 0,
+        "size": 20,
+        "totalElements": 1,
+        "totalPages": 1
+    }
+}
+
+
+
+
+
+3) 동기식 호출 / 서킷 브레이킹 / 장애격리
+방식1) 서킷 브레이킹 프레임워크의 선택: istio-injection + DestinationRule
+
+kubectl label namespace mybnb istio-injection=enabled
+
+부하테스터 siege 툴을 통한 서킷 브레이커 동작 확인:
+
+숙소 등록시 동기로 호출되는 인증 서비스에 설정
+
+숙소등록 부하 발생 (siege 에서) - 동시사용자 10명, 60초 동안 실시
+siege -v -c10 -t60S -r10 --content-type "application/json" 'http://room:8080/rooms POST {"name":"호텔100", "price":1000, "address":"서울", "host":"부하테스트자"}'
+
+서킷 브레이킹을 위한 DestinationRule 적용
+kubectl apply -f dr-host.yaml
+
+--dr-host.yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: dr-host
+  namespace: mybnb
+spec:
+  host: host
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1
+        maxRequestsPerConnection: 1
+    outlierDetection:
+      interval: 1s
+      consecutiveErrors: 2
+      baseEjectionTime: 10s
+      maxEjectionPercent: 100
+
+
+서킷 브레이킹 확인 (siege 에서)  ->캡쳐!!!!
+Transactions:                     24 hits
+Availability:                   2.27 %
+Elapsed time:                   9.17 secs
+Data transferred:               0.25 MB
+Response time:                  3.79 secs
+Transaction rate:               2.62 trans/sec
+Throughput:                     0.03 MB/sec
+Concurrency:                    9.92
+Successful transactions:          24
+Failed transactions:            1033
+Longest transaction:            0.46
+Shortest transaction:           0.01
+...
+
+
+
+서킷 브레이킹을 위한 DestinationRule 제거
+
+$  kubectl delete -f dr-host.yaml
+숙소등록 부하 발생 (siege 에서) - 동시사용자 10명, 60초 동안 실시
+$ siege -v -c10 -t60S -r10 --content-type "application/json" 'http://room:8080/rooms POST {"name":"호텔100", "price":1000, "address":"서울", "host":"부하테스트자"}'
+
+
+정상 동작 확인 (siege 에서)
+...
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.18 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.20 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.20 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.20 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.19 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.22 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.19 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.19 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.20 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.02 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.12 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.12 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.18 secs:     254 bytes ==> POST http://room:8080/rooms
+...
+
+Lifting the server siege...
+Transactions:                   5305 hits
+Availability:                 100.00 %
+Elapsed time:                  59.85 secs
+Data transferred:               1.29 MB
+Response time:                  0.11 secs
+Transaction rate:              88.64 trans/sec
+Throughput:                     0.02 MB/sec
+Concurrency:                    9.92
+Successful transactions:        5305
+Failed transactions:               0
+Longest transaction:            0.58
+Shortest transaction:           0.01
+
+
+
+
+
+4) 오토스케일 아웃
+
+(istio injection 적용한 경우) istio injection 적용 해제
+kubectl label namespace mybnb istio-injection=disabled --overwrite
+
+kubectl apply -f room.yaml
+kubectl apply -f host.yaml
+
+(Spring FeignClient + Hystrix 적용한 경우) 위에서 설정된 CB는 제거해야함.
+
+결제서비스 배포시 resource 설정 적용되어 있음
+    spec:
+      containers:
+          ...
+          resources:
+            limits:
+              cpu: 500m
+            requests:
+              cpu: 200m
+
+인증 서비스에 대한 replica 를 동적으로 늘려주도록 HPA 를 설정한다. 설정은 CPU 사용량이 15프로를 넘어서면 replica 를 3개까지 늘려준다:
+HPA 적용
+
+
+kubectl autoscale deploy host -n mybnb --min=1 --max=3 --cpu-percent=15
+ ->모니터링
+kubectl get deploy host -n mybnb -w     
+
+
+
+숙소등록 부하 발생 (siege 에서) - 동시사용자 10명, 180초 동안 실시
+siege -v -c10 -t60S -r10 --content-type "application/json" 'http://room:8080/rooms POST {"name":"호텔100", "price":1000, "address":"서울", "host":"부하테스트자"}'
+
+
+정상 동작 확인 (siege 에서)
+...
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.08 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.02 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.08 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.08 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.01 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.01 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.02 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.05 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.06 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.09 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.18 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.08 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.17 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.19 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.19 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.11 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.15 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.13 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.20 secs:     254 bytes ==> POST http://room:8080/rooms
+HTTP/1.1 201     0.10 secs:     254 bytes ==> POST http://room:8080/rooms
+.....
+
+Lifting the server siege...
+Transactions:                   6737 hits
+Availability:                 100.00 %
+Elapsed time:                  59.20 secs
+Data transferred:               1.64 MB
+Response time:                  0.09 secs
+Transaction rate:             113.80 trans/sec
+Throughput:                     0.03 MB/sec
+Concurrency:                    9.76
+Successful transactions:        6737
+Failed transactions:               0
+Longest transaction:            0.45
+Shortest transaction:           0.01     
+
+
+스케일 아웃 확인  -> 모니터링 화면 
+skccadmin@SKCC16D00075:~/mybnb3/mybnb/finalproject/mybnb/mybnb/yaml$ kubectl get deploy host -n mybnb -w
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+host   1/1     1            1           25m
+host   1/3     1            1           25m
+host   1/3     1            1           25m
+host   1/3     1            1           25m
+host   1/3     3            1           25m
+host   2/3     3            2           26m
+host   3/3     3            3           26m
+
+
+
+
+5 ) 무정지 재배포
+먼저 무정지 재배포가 100% 되는 것인지 확인하기 위해서 Autoscaler 이나 CB 설정을 제거함
+
+kubectl apply -f room.yaml
+
+siege -v -c1 -t300S -r10 --content-type "application/json" 'http://room:8080/rooms'
+
+
+새버전으로의 배포 시작
+# 컨테이너 이미지 Update (readness, liveness 미설정 상태)
+
+kubectl apply -f room_na.yaml 실행
+
+seige 의 화면으로 넘어가서 Availability 가 100% 미만으로 떨어졌는지 확인
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.01 secs:      95 bytes ==> GET  /rooms
+HTTP/1.1 503     0.00 secs:      95 bytes ==> GET  /rooms
+siege aborted due to excessive socket failure; you
+can change the failure threshold in $HOME/.siegerc
+
+Transactions:                   2847 hits
+Availability:                  73.55 %
+Elapsed time:                  21.47 secs
+Data transferred:               1.01 MB
+Response time:                  0.01 secs
+Transaction rate:             132.60 trans/sec
+Throughput:                     0.05 MB/sec
+Concurrency:                    0.98
+Successful transactions:        2847
+Failed transactions:            1024
+Longest transaction:            0.59
+Shortest transaction:           0.00
+
+
+
+# deployment.yaml 의 readiness probe 의 설정:
+
+kubectl apply -f room.yaml 실행
+
+뜨는중
+
+NAME                           READY   STATUS    RESTARTS   AGE
+pod/alarm-bc469c66b-t4mt8      2/2     Running   1          65m
+pod/booking-6f85b67876-fwbdn   2/2     Running   1          5h6m
+pod/gateway-7bd59945-rk6fk     2/2     Running   0          5h6m
+pod/host-69b4f886c-972g5       1/2     Running   0          70s
+pod/host-69b4f886c-jj4tt       1/2     Running   0          70s
+pod/host-69b4f886c-wsr6b       2/2     Running   1          82m
+pod/html-78f648d5b-mx6zb       2/2     Running   0          5h6m
+pod/mypage-7587b7598b-bkdbn    2/2     Running   1          5h6m
+pod/pay-755d679cbf-r9s4v       2/2     Running   1          5h6m
+pod/room-5db44c4dc4-b7lq4      2/2     Running   0          116s
+pod/room-6f4b46ff64-nc95g      1/2     Running   0          14s
+pod/siege                      2/2     Running   0          16h
+
+성공중
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.02 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.01 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+HTTP/1.1 200     0.00 secs:     339 bytes ==> GET  /rooms
+
+
+
+배포기간 동안 Availability 가 변화없기 때문에 무정지 재배포가 성공한 것으로 확인됨.
+
+
+
+
+
+
+6) ConfigMap 사용 확인
+kubectl describe pod room-6f4b46ff64-k89fs -n mybnb
+
+ConfigMap 배포 확인
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mybnb-config
+  namespace: mybnb
+data:
+  api.url.payment: http://pay:8080
+  api.url.host: http://host:8080
+  alarm.prefix: Hello
+~                                                                                                                        ~                                                                                                                        ~                                                                                                                        ~                                     
+
+
+ConfigMap 사용 확인
+$ kubectl describe pod room-6f4b46ff64-9hvqk -n mybnb
+Name:           room-6f4b46ff64-9hvqk
+Namespace:      mybnb
+Priority:       0
+Node:           ip-192-168-90-119.ap-northeast-2.compute.internal/192.168.90.119
+Start Time:     Thu, 06 Aug 2020 14:57:29 +0900
+Labels:         app=room
+                pod-template-hash=6f4b46ff64
+                security.istio.io/tlsMode=istio
+Annotations:    kubernetes.io/psp: eks.privileged
+                sidecar.istio.io/status:
+                  {"version":"805d5a8f492b8fa20c7d92aac6e0cda9fe0f1fe63e5073b929d39ea721788f25","initContainers":["istio-init"],"containers":["istio-proxy"]...
+Status:         Running
+IP:             192.168.74.31
+IPs:            <none>
+Controlled By:  ReplicaSet/room-6f4b46ff64
+Init Containers:
+  istio-init:
+    Container ID:  docker://e9366ce91802129dbc858c949ee5fc90c0a22ad13ab91f3e2c49050ac42b853d
+    Image:         docker.io/istio/proxyv2:1.4.5
+    Image ID:      docker-pullable://istio/proxyv2@sha256:fc09ea0f969147a4843a564c5b677fbf3a6f94b56627d00b313b4c30d5fef094
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      istio-iptables
+      -p
+      15001
+      -z
+      15006
+      -u
+      1337
+      -m
+      REDIRECT
+      -i
+      *
+      -x
+
+
+      -b
+      *
+      -d
+      15020
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 06 Aug 2020 14:57:30 +0900
+      Finished:     Thu, 06 Aug 2020 14:57:30 +0900
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     100m
+      memory:  50Mi
+    Requests:
+      cpu:        10m
+      memory:     10Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-7kzxm (ro)
+Containers:
+  room:
+    Container ID:   docker://33c33c15c33132ff8bb0a0f4f927e92df84beded2d4616deb07eb59f7fde8d39
+    Image:          496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/mybnb-room:latest
+    Image ID:       docker-pullable://496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/mybnb-room@sha256:84246c49c07e8619ac4e899fe2058d5aee0b274d2d3b6f1ff84fcc0228cfe7e5
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu, 06 Aug 2020 14:57:34 +0900
+    Ready:          True
+    Restart Count:  0
+    Liveness:       http-get http://:8080/actuator/health delay=120s timeout=2s period=5s #success=1 #failure=5
+    Readiness:      http-get http://:8080/actuator/health delay=10s timeout=2s period=5s #success=1 #failure=10
+    Environment:
+      api.url.host:  <set to the key 'api.url.host' of config map 'mybnb-config'>  Optional: false       ---------------------->!!!
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-7kzxm (ro)
+  istio-proxy:
